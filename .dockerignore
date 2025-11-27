@@ -1,0 +1,4 @@
+cve/node_modules
+.git
+.next
+cve/.next
