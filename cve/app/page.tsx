@@ -38,9 +38,9 @@ type CveListItem = {
   cve_id: string;
   vendor: string;
   product: string;
-  cvss_score: number;
+  cvss_score: number | string | undefined;
   severity: string;
-  score: number; // Relevance / önem skoru
+  score: number | string | undefined; // Relevance / önem skoru
 };
 
 type SearchItem = CveListItem;
@@ -57,7 +57,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "matching", label: "🧩 Uygulama Eşleşmeleri" },
 ];
 
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL = "http://localhost:8080/api";
 
 /* ==========================
    MOCK VERİLER
@@ -215,6 +215,26 @@ function severityColor(sev: string) {
     default:
       return { dot: "#6b7280", bg: "rgba(107,114,128,0.15)", text: "#e5e7eb" };
   }
+}
+
+// cvss_score değerini güvenli biçimde yazdırmak için
+function formatCvss(score: number | string | undefined | null) {
+  if (typeof score === "number") return score.toFixed(1);
+  if (typeof score === "string") {
+    const num = Number(score);
+    return Number.isFinite(num) ? num.toFixed(1) : "N/A";
+  }
+  return "N/A";
+}
+
+// score (önem skoru) için
+function formatScore(score: number | string | undefined | null) {
+  if (typeof score === "number") return score;
+  if (typeof score === "string") {
+    const num = Number(score);
+    return Number.isFinite(num) ? num : "N/A";
+  }
+  return "N/A";
 }
 
 /* ==========================
@@ -793,7 +813,7 @@ export default function Home() {
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {item.cvss_score.toFixed(1)}
+                  {formatCvss(item.cvss_score)}
                 </div>
 
                 <div style={{ textAlign: "right" }}>
@@ -829,7 +849,7 @@ export default function Home() {
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {item.score}
+                  {formatScore(item.score)}
                 </div>
               </div>
             );
@@ -840,7 +860,7 @@ export default function Home() {
   };
 
   /* ==========================
-     KRİTİK CVE'LER: /api/critical
+     KRİTİK CVE'LER: /api/cves?severity=CRITICAL
   ========================== */
 
   useEffect(() => {
@@ -849,13 +869,33 @@ export default function Home() {
         setCriticalLoading(true);
         setCriticalError(null);
 
-        const res = await fetch(`${API_BASE_URL}/critical?limit=20`);
+        const res = await fetch(
+          `${API_BASE_URL}/cves?severity=CRITICAL&limit=20`
+        );
         if (!res.ok) {
           throw new Error(`API error ${res.status}`);
         }
 
-        const data = (await res.json()) as CriticalItem[];
-        setCriticalItems(data);
+        const data = (await res.json()) as any;
+
+        let items: CriticalItem[] = [];
+        if (Array.isArray(data)) {
+          items = data as CriticalItem[];
+        } else if (Array.isArray(data.items)) {
+          items = data.items as CriticalItem[];
+        } else {
+          console.warn("Unexpected critical API response:", data);
+        }
+
+        if (!items || items.length === 0) {
+          // veri yoksa mock'a düş
+          setCriticalItems(CRITICAL_MOCK_ITEMS);
+          setCriticalError(
+            "Gerçek kritik CVE verisi bulunamadı, mock veriler gösteriliyor."
+          );
+        } else {
+          setCriticalItems(items);
+        }
       } catch (err: unknown) {
         console.error("Critical API error:", err);
         setCriticalItems(CRITICAL_MOCK_ITEMS);
@@ -889,9 +929,9 @@ export default function Home() {
             marginBottom: 20,
           }}
         >
-          Burada sistemde en kritik kabul edilen CVE&apos;leri görüyorsun. Liste
-          <code> /api/critical</code> endpoint&apos;inden geliyor; backend
-          kapalıysa mock veri kullanılıyor.
+          Burada sistemde en kritik kabul edilen CVE&apos;leri görüyorsun. Liste{" "}
+          <code>/api/cves?severity=CRITICAL</code> endpoint&apos;inden geliyor;
+          backend kapalıysa mock veri kullanılıyor.
         </p>
 
         {criticalError && (
@@ -915,6 +955,10 @@ export default function Home() {
         >
           {criticalItems.map((item) => {
             const sev = severityColor(item.severity);
+            const scoreValue =
+              typeof item.score === "number"
+                ? item.score
+                : Number(item.score) || 0;
 
             return (
               <div
@@ -980,7 +1024,8 @@ export default function Home() {
                     marginBottom: 4,
                   }}
                 >
-                  {item.vendor} — {item.product}
+                  {item.vendor ?? "Bilinmeyen Vendor"} —{" "}
+                  {item.product ?? "Bilinmeyen Ürün"}
                 </div>
 
                 <div
@@ -991,8 +1036,8 @@ export default function Home() {
                   }}
                 >
                   CVSS skoru:{" "}
-                  <strong>{item.cvss_score.toFixed(1)}</strong> • Önem skoru:{" "}
-                  <strong>{item.score}</strong>
+                  <strong>{formatCvss(item.cvss_score)}</strong> • Önem skoru:{" "}
+                  <strong>{formatScore(item.score)}</strong>
                 </div>
 
                 <div
@@ -1005,7 +1050,7 @@ export default function Home() {
                 >
                   <div
                     style={{
-                      width: `${Math.min(item.score, 100)}%`,
+                      width: `${Math.min(scoreValue, 100)}%`,
                       height: "100%",
                       background:
                         "linear-gradient(to right, #f97316, #ef4444)",
