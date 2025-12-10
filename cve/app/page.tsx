@@ -250,9 +250,14 @@ export default function Home() {
   const [statsError, setStatsError] = useState<string | null>(null);
 
   // MATCHING state
+  const [matchingApps, setMatchingApps] = useState<MatchingApp[]>([]);
+  const [matchingLoading, setMatchingLoading] = useState(false);
+  const [matchingError, setMatchingError] = useState<string | null>(null);
   const [matchingFilter, setMatchingFilter] = useState<MatchingFilter>("all");
   const [matchingSearch, setMatchingSearch] = useState("");
   const [selectedApp, setSelectedApp] = useState<MatchingApp | null>(null);
+  const [appDetail, setAppDetail] = useState<any>(null);
+  const [appDetailLoading, setAppDetailLoading] = useState(false);
 
   // SEARCH state
   const [searchQuery, setSearchQuery] = useState("");
@@ -910,6 +915,50 @@ export default function Home() {
     fetchCritical();
   }, []);
 
+  /* ==========================
+     MATCHING: /api/matching/apps
+  ========================== */
+
+  useEffect(() => {
+    const fetchMatchingApps = async () => {
+      try {
+        setMatchingLoading(true);
+        setMatchingError(null);
+
+        const res = await fetch(`${API_BASE_URL}/matching/apps?page_size=100`);
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+
+        const data = await res.json();
+        const items = data.items || [];
+        setMatchingApps(items);
+      } catch (err: unknown) {
+        console.error("Matching API error:", err);
+        setMatchingApps(MOCK_MATCHING_APPS);
+        setMatchingError("Backend kapalı, mock veriler gösteriliyor.");
+      } finally {
+        setMatchingLoading(false);
+      }
+    };
+
+    fetchMatchingApps();
+  }, []);
+
+  // Uygulama detayı çek
+  const fetchAppDetail = async (appId: string) => {
+    try {
+      setAppDetailLoading(true);
+      const res = await fetch(`${API_BASE_URL}/matching/apps/${appId}`);
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json();
+      setAppDetail(data);
+    } catch (err) {
+      console.error("App detail error:", err);
+      setAppDetail(null);
+    } finally {
+      setAppDetailLoading(false);
+    }
+  };
+
   const renderCritical = () => {
     return (
       <>
@@ -1105,7 +1154,7 @@ export default function Home() {
   const renderMatching = () => {
     const q = matchingSearch.trim().toLowerCase();
 
-    const filtered = MOCK_MATCHING_APPS.filter((app) => {
+    const filtered = matchingApps.filter((app) => {
       if (matchingFilter === "exact" && !app.has_exact_match) return false;
       if (matchingFilter === "fuzzy" && !app.has_fuzzy_match) return false;
       if (
@@ -1122,14 +1171,14 @@ export default function Home() {
       );
     });
 
-    const total = MOCK_MATCHING_APPS.length;
-    const exactCount = MOCK_MATCHING_APPS.filter(
+    const total = matchingApps.length;
+    const exactCount = matchingApps.filter(
       (a) => a.has_exact_match
     ).length;
-    const fuzzyCount = MOCK_MATCHING_APPS.filter(
+    const fuzzyCount = matchingApps.filter(
       (a) => a.has_fuzzy_match
     ).length;
-    const noneCount = MOCK_MATCHING_APPS.filter(
+    const noneCount = matchingApps.filter(
       (a) => !a.has_exact_match && !a.has_fuzzy_match
     ).length;
 
@@ -1152,10 +1201,21 @@ export default function Home() {
           }}
         >
           Bu ekranda kurum içi uygulamaların CVE veritabanı ile eşleşme
-          durumunu görüyorsun. Şu an mock veri kullanılıyor; backend hazır
-          olduğunda bu liste <code>/api/matching/apps</code>{" "}
-          endpoint&apos;inden gelecek.
+          durumunu görüyorsun. Veriler <code>/api/matching/apps</code>{" "}
+          endpoint&apos;inden geliyor.
         </p>
+
+        {matchingLoading && (
+          <p style={{ fontSize: 13, color: "#cbd5f5", marginBottom: 12 }}>
+            Yükleniyor...
+          </p>
+        )}
+
+        {matchingError && (
+          <p style={{ fontSize: 12, color: "#fca5a5", marginBottom: 12 }}>
+            {matchingError}
+          </p>
+        )}
 
         {/* Özet chip'ler */}
         <div
@@ -1320,9 +1380,15 @@ export default function Home() {
             return (
               <button
                 key={app.app_id}
-                onClick={() =>
-                  setSelectedApp(isSelected ? null : app)
-                }
+                onClick={() => {
+                  if (isSelected) {
+                    setSelectedApp(null);
+                    setAppDetail(null);
+                  } else {
+                    setSelectedApp(app);
+                    fetchAppDetail(app.app_id);
+                  }
+                }}
                 style={{
                   width: "100%",
                   border: "none",
@@ -1428,30 +1494,102 @@ export default function Home() {
               </button>
             </div>
 
-            <p
-              style={{
-                fontSize: 13,
-                color: "#cbd5f5",
-                marginBottom: 6,
-              }}
-            >
-              Burada{" "}
-              <code>/api/matching/apps/{selectedApp.app_id}</code>{" "}
-              endpoint&apos;inden gelen detay eşleşmeleri göstereceğiz
-              (şimdilik sadece mock açıklama).
-            </p>
-            <p
-              style={{
-                fontSize: 12,
-                color: "#9ca3af",
-              }}
-            >
-              Backend hazır olduğunda bu panelde:
-              <br />– Hangi CVE&apos;lerle eşleştiği
-              <br />– Exact / fuzzy ayrımı
-              <br />– Versiyon bilgileri
-              <br />– NVD linkleri yer alacak.
-            </p>
+            {appDetailLoading && (
+              <p style={{ fontSize: 13, color: "#cbd5f5" }}>
+                CVE eşleşmeleri yükleniyor...
+              </p>
+            )}
+
+            {appDetail && appDetail.matches && appDetail.matches.length > 0 ? (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 8 }}>
+                  Toplam {appDetail.matches.length} CVE eşleşmesi bulundu:
+                </div>
+                <div
+                  style={{
+                    maxHeight: 300,
+                    overflowY: "auto",
+                    borderRadius: 8,
+                    border: "1px solid #1e293b",
+                  }}
+                >
+                  {appDetail.matches.map((match: any, idx: number) => {
+                    const sev = severityColor(match.severity || "UNKNOWN");
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1.5fr 0.8fr 0.8fr 1fr",
+                          gap: 8,
+                          padding: "8px 12px",
+                          fontSize: 12,
+                          borderBottom: idx < appDetail.matches.length - 1 ? "1px solid #0f172a" : "none",
+                          alignItems: "center",
+                        }}
+                      >
+                        <a
+                          href={`https://nvd.nist.gov/vuln/detail/${match.cve_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            color: "#60a5fa",
+                            textDecoration: "none",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {match.cve_id}
+                        </a>
+                        <span
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            backgroundColor: match.algorithm === "exact" ? "rgba(22,163,74,0.18)" : "rgba(245,158,11,0.18)",
+                            color: match.algorithm === "exact" ? "#bbf7d0" : "#fed7aa",
+                            fontSize: 10,
+                            textAlign: "center",
+                          }}
+                        >
+                          {match.algorithm}
+                        </span>
+                        <span style={{ color: "#e5e7eb", textAlign: "right" }}>
+                          {match.score?.toFixed(0)}%
+                        </span>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "flex-end",
+                            gap: 4,
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            backgroundColor: sev.bg,
+                            color: sev.text,
+                            fontSize: 10,
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: 999,
+                              backgroundColor: sev.dot,
+                            }}
+                          />
+                          {match.severity || "N/A"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              !appDetailLoading && (
+                <p style={{ fontSize: 12, color: "#9ca3af" }}>
+                  Bu uygulama için CVE eşleşmesi bulunamadı.
+                </p>
+              )
+            )}
           </div>
         )}
       </>
