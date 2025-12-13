@@ -57,7 +57,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "matching", label: "🧩 Uygulama Eşleşmeleri" },
 ];
 
-const API_BASE_URL = "http://localhost:8080/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 /* ==========================
    MOCK VERİLER
@@ -632,15 +632,24 @@ export default function Home() {
       setHasSearched(true);
 
       const params = new URLSearchParams({
-        q: searchQuery.trim(),
-        limit: "20",
+        search: searchQuery.trim(),
+        page_size: "20",
       });
 
-      const res = await fetch(`${API_BASE_URL}/search?${params.toString()}`);
+      const res = await fetch(`${API_BASE_URL}/cves?${params.toString()}`);
       if (!res.ok) throw new Error(`API error ${res.status}`);
 
-      const data = (await res.json()) as SearchItem[];
-      setSearchResults(data);
+      const data = await res.json();
+      const items = (data.items || []).map((item: Record<string, unknown>) => ({
+        cve_id: item.cve_id,
+        vendor: item.vendor || "N/A",
+        product: item.product || "N/A",
+        cvss_score: item.cvss_score,
+        severity: item.severity || "UNKNOWN",
+        score: item.cvss_score,
+      })) as SearchItem[];
+      setSearchResults(items);
+      setSearchInfo(`${data.total} sonuç bulundu`);
     } catch (err: unknown) {
       console.error("Search API error:", err);
       setSearchResults(MOCK_SEARCH_RESULTS);
@@ -875,7 +884,7 @@ export default function Home() {
         setCriticalError(null);
 
         const res = await fetch(
-          `${API_BASE_URL}/cves?severity=CRITICAL&limit=20`
+          `${API_BASE_URL}/cves?severity=CRITICAL&page_size=20`
         );
         if (!res.ok) {
           throw new Error(`API error ${res.status}`);
