@@ -27,11 +27,15 @@ type MatchingApp = {
   app_name: string;
   exact_match_count: number;
   fuzzy_match_count: number;
+  semantic_match_count: number;
+  vendor_match_count: number;
   has_exact_match: boolean;
   has_fuzzy_match: boolean;
+  has_semantic_match: boolean;
+  has_vendor_match: boolean;
 };
 
-type MatchingFilter = "all" | "exact" | "fuzzy" | "none";
+type MatchingFilter = "all" | "exact" | "fuzzy" | "semantic" | "vendor" | "none";
 
 /** Arama / kritik listelerinde kullanılan ortak CVE satırı tipi */
 type CveListItem = {
@@ -81,40 +85,60 @@ const MOCK_MATCHING_APPS: MatchingApp[] = [
     app_name: "Microsoft Exchange Server",
     exact_match_count: 5,
     fuzzy_match_count: 1,
+    semantic_match_count: 2,
+    vendor_match_count: 3,
     has_exact_match: true,
     has_fuzzy_match: true,
+    has_semantic_match: true,
+    has_vendor_match: true,
   },
   {
     app_id: "APP-002",
     app_name: "Apache Tomcat",
     exact_match_count: 0,
     fuzzy_match_count: 2,
+    semantic_match_count: 1,
+    vendor_match_count: 0,
     has_exact_match: false,
     has_fuzzy_match: true,
+    has_semantic_match: true,
+    has_vendor_match: false,
   },
   {
     app_id: "APP-003",
     app_name: "Custom Legacy App",
     exact_match_count: 0,
     fuzzy_match_count: 0,
+    semantic_match_count: 0,
+    vendor_match_count: 0,
     has_exact_match: false,
     has_fuzzy_match: false,
+    has_semantic_match: false,
+    has_vendor_match: false,
   },
   {
     app_id: "APP-004",
     app_name: "Oracle Database",
     exact_match_count: 3,
     fuzzy_match_count: 0,
+    semantic_match_count: 0,
+    vendor_match_count: 2,
     has_exact_match: true,
     has_fuzzy_match: false,
+    has_semantic_match: false,
+    has_vendor_match: true,
   },
   {
     app_id: "APP-005",
     app_name: "NGINX Reverse Proxy",
     exact_match_count: 1,
     fuzzy_match_count: 3,
+    semantic_match_count: 2,
+    vendor_match_count: 1,
     has_exact_match: true,
     has_fuzzy_match: true,
+    has_semantic_match: true,
+    has_vendor_match: true,
   },
 ];
 
@@ -237,6 +261,22 @@ function formatScore(score: number | string | undefined | null) {
   return "N/A";
 }
 
+// Algorithm türüne göre renk ve etiket
+function algorithmStyle(algorithm: string) {
+  switch (algorithm) {
+    case "exact":
+      return { bg: "rgba(22,163,74,0.2)", text: "#bbf7d0", label: "Exact (90-100)" };
+    case "fuzzy":
+      return { bg: "rgba(245,158,11,0.2)", text: "#fed7aa", label: "Fuzzy (70-89)" };
+    case "semantic":
+      return { bg: "rgba(59,130,246,0.2)", text: "#bfdbfe", label: "Semantic (55-69)" };
+    case "vendor":
+      return { bg: "rgba(168,85,247,0.2)", text: "#e9d5ff", label: "Vendor (40-54)" };
+    default:
+      return { bg: "rgba(107,114,128,0.2)", text: "#e5e7eb", label: algorithm };
+  }
+}
+
 /* ==========================
    Ana komponent
 ========================== */
@@ -259,6 +299,16 @@ export default function Home() {
   const [appDetail, setAppDetail] = useState<any>(null);
   const [appDetailLoading, setAppDetailLoading] = useState(false);
 
+  // NEW APPLICATION state
+  const [showAddAppForm, setShowAddAppForm] = useState(false);
+  const [newAppName, setNewAppName] = useState("");
+  const [newAppVendor, setNewAppVendor] = useState("");
+  const [newAppVersion, setNewAppVersion] = useState("");
+  const [newAppCategory, setNewAppCategory] = useState("");
+  const [addAppLoading, setAddAppLoading] = useState(false);
+  const [addAppError, setAddAppError] = useState<string | null>(null);
+  const [addAppResult, setAddAppResult] = useState<any>(null);
+
   // SEARCH state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchItem[]>([]);
@@ -268,6 +318,14 @@ export default function Home() {
     "Bir vendor, ürün veya CVE ID yazarak arama yapabilirsin."
   );
   const [hasSearched, setHasSearched] = useState(false);
+
+  // REAL-TIME MATCHING state
+  const [matchAppName, setMatchAppName] = useState("");
+  const [matchVendor, setMatchVendor] = useState("");
+  const [matchResults, setMatchResults] = useState<any[]>([]);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchError, setMatchError] = useState<string | null>(null);
+  const [showMatchPanel, setShowMatchPanel] = useState(false);
 
   // CRITICAL state
   const [criticalItems, setCriticalItems] = useState<CriticalItem[]>([]);
@@ -666,6 +724,39 @@ export default function Home() {
     }
   };
 
+  // Real-time matching function
+  const handleRealTimeMatch = async () => {
+    if (!matchAppName.trim()) {
+      setMatchError("Uygulama adı gerekli");
+      return;
+    }
+
+    try {
+      setMatchLoading(true);
+      setMatchError(null);
+
+      const res = await fetch(`${API_BASE_URL}/match`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          app_name: matchAppName.trim(),
+          vendor: matchVendor.trim(),
+        }),
+      });
+
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+
+      const data = await res.json();
+      setMatchResults(data.matches || []);
+    } catch (err) {
+      console.error("Match API error:", err);
+      setMatchError("Eşleştirme yapılamadı. Backend kapalı olabilir.");
+      setMatchResults([]);
+    } finally {
+      setMatchLoading(false);
+    }
+  };
+
   const renderSearch = () => {
     return (
       <>
@@ -744,6 +835,158 @@ export default function Home() {
           <p style={{ fontSize: 12, color: "#fca5a5", marginBottom: 8 }}>
             {searchError}
           </p>
+        )}
+
+        {/* Uygulama Eşleştir Toggle */}
+        <div style={{ marginBottom: 16 }}>
+          <button
+            onClick={() => setShowMatchPanel(!showMatchPanel)}
+            style={{
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: "1px solid #4f46e5",
+              backgroundColor: showMatchPanel ? "#4f46e5" : "transparent",
+              color: showMatchPanel ? "white" : "#4f46e5",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            {showMatchPanel ? "Paneli Kapat" : "Uygulama Eşleşmelerini Bul"}
+          </button>
+        </div>
+
+        {/* Uygulama Eşleştir Panel */}
+        {showMatchPanel && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: 16,
+              borderRadius: 12,
+              backgroundColor: "#0f172a",
+              border: "1px solid #1e293b",
+            }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: "#e5e7eb" }}>
+              Uygulama CVE Eşleştirmesi
+            </h3>
+            <p style={{ fontSize: 12, color: "#9ca3af", marginBottom: 12 }}>
+              Uygulama adı ve vendor girerek ilgili CVE&apos;leri otomatik bul.
+            </p>
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              <input
+                placeholder="Uygulama Adı (örnek: Apache Tomcat)"
+                value={matchAppName}
+                onChange={(e) => setMatchAppName(e.target.value)}
+                style={{
+                  flex: "1 1 200px",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #1e293b",
+                  backgroundColor: "#020617",
+                  color: "#e5e7eb",
+                  fontSize: 13,
+                }}
+              />
+              <input
+                placeholder="Vendor (örnek: apache)"
+                value={matchVendor}
+                onChange={(e) => setMatchVendor(e.target.value)}
+                style={{
+                  flex: "1 1 150px",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #1e293b",
+                  backgroundColor: "#020617",
+                  color: "#e5e7eb",
+                  fontSize: 13,
+                }}
+              />
+              <button
+                onClick={() => void handleRealTimeMatch()}
+                disabled={matchLoading}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: 8,
+                  border: "none",
+                  backgroundColor: matchLoading ? "#4b5563" : "#10b981",
+                  color: "white",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: matchLoading ? "default" : "pointer",
+                }}
+              >
+                {matchLoading ? "Eşleştiriliyor..." : "Eşleşmeleri Bul"}
+              </button>
+            </div>
+
+            {matchError && (
+              <p style={{ fontSize: 12, color: "#fca5a5", marginBottom: 8 }}>{matchError}</p>
+            )}
+
+            {/* Eşleşme Sonuçları */}
+            {matchResults.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ fontSize: 13, color: "#10b981", marginBottom: 8 }}>
+                  {matchResults.length} CVE eşleşmesi bulundu
+                </p>
+                <div
+                  style={{
+                    maxHeight: 300,
+                    overflowY: "auto",
+                    borderRadius: 8,
+                    border: "1px solid #1e293b",
+                  }}
+                >
+                  {matchResults.map((m, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1.2fr 0.8fr 0.7fr 0.6fr 0.6fr",
+                        padding: "10px 12px",
+                        fontSize: 12,
+                        borderBottom: "1px solid #1e293b",
+                        backgroundColor: idx % 2 === 0 ? "#020617" : "#0f172a",
+                      }}
+                    >
+                      <a
+                        href={`https://nvd.nist.gov/vuln/detail/${m.cve_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "#60a5fa", textDecoration: "none" }}
+                      >
+                        {m.cve_id}
+                      </a>
+                      <div style={{ color: "#9ca3af" }}>{m.vendor || "N/A"}</div>
+                      <div style={{ color: "#9ca3af" }}>{m.product || "N/A"}</div>
+                      <div>
+                        <span
+                          style={{
+                            padding: "2px 8px",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            fontWeight: 600,
+                            backgroundColor:
+                              m.severity === "CRITICAL" ? "#dc2626" :
+                              m.severity === "HIGH" ? "#ea580c" :
+                              m.severity === "MEDIUM" ? "#ca8a04" : "#4b5563",
+                            color: "white",
+                          }}
+                        >
+                          {m.severity || "N/A"}
+                        </span>
+                      </div>
+                      <div style={{ color: "#9ca3af" }}>
+                        Skor: {m.score}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Sonuç tablosu */}
@@ -968,6 +1211,69 @@ export default function Home() {
     }
   };
 
+  // Yeni uygulama ekle ve otomatik matching yap
+  const handleAddApplication = async () => {
+    if (!newAppName.trim() || !newAppVendor.trim()) {
+      setAddAppError("Uygulama adı ve vendor zorunludur.");
+      return;
+    }
+
+    try {
+      setAddAppLoading(true);
+      setAddAppError(null);
+      setAddAppResult(null);
+
+      const res = await fetch(`${API_BASE_URL}/applications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          app_name: newAppName.trim(),
+          vendor: newAppVendor.trim(),
+          version: newAppVersion.trim() || null,
+          category: newAppCategory.trim() || null,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+
+      const data = await res.json();
+      setAddAppResult(data);
+
+      // Listeyi güncelle - yeni uygulamayı ekle
+      const newApp: MatchingApp = {
+        app_id: data.application.app_id,
+        app_name: data.application.app_name,
+        exact_match_count: data.matches?.filter((m: any) => m.algorithm === "exact").length || 0,
+        fuzzy_match_count: data.matches?.filter((m: any) => m.algorithm === "fuzzy").length || 0,
+        semantic_match_count: data.matches?.filter((m: any) => m.algorithm === "semantic").length || 0,
+        vendor_match_count: data.matches?.filter((m: any) => m.algorithm === "vendor").length || 0,
+        has_exact_match: data.matches?.some((m: any) => m.algorithm === "exact") || false,
+        has_fuzzy_match: data.matches?.some((m: any) => m.algorithm === "fuzzy") || false,
+        has_semantic_match: data.matches?.some((m: any) => m.algorithm === "semantic") || false,
+        has_vendor_match: data.matches?.some((m: any) => m.algorithm === "vendor") || false,
+      };
+      setMatchingApps((prev) => [...prev, newApp]);
+
+      // Formu temizle
+      setNewAppName("");
+      setNewAppVendor("");
+      setNewAppVersion("");
+      setNewAppCategory("");
+    } catch (err) {
+      console.error("Add application error:", err);
+      setAddAppError("Uygulama eklenemedi. Backend kapalı olabilir.");
+    } finally {
+      setAddAppLoading(false);
+    }
+  };
+
+  // Formu kapat ve temizle
+  const closeAddAppForm = () => {
+    setShowAddAppForm(false);
+    setAddAppResult(null);
+    setAddAppError(null);
+  };
+
   const renderCritical = () => {
     return (
       <>
@@ -1128,14 +1434,7 @@ export default function Home() {
   ========================== */
 
   const getMatchBadge = (app: MatchingApp) => {
-    if (app.has_exact_match && app.has_fuzzy_match) {
-      return {
-        label: "Exact + Fuzzy",
-        bg: "rgba(59,130,246,0.15)",
-        text: "#bfdbfe",
-        emoji: "🟦",
-      };
-    }
+    // CASCADE mantığı: Sadece bir türde eşleşme olabilir
     if (app.has_exact_match) {
       return {
         label: "Exact eşleşme",
@@ -1146,10 +1445,26 @@ export default function Home() {
     }
     if (app.has_fuzzy_match) {
       return {
-        label: "Fuzzy (benzer) eşleşme",
+        label: "Fuzzy eşleşme",
         bg: "rgba(245,158,11,0.18)",
         text: "#fed7aa",
         emoji: "🟠",
+      };
+    }
+    if (app.has_semantic_match) {
+      return {
+        label: "Semantic eşleşme",
+        bg: "rgba(59,130,246,0.18)",
+        text: "#bfdbfe",
+        emoji: "🔵",
+      };
+    }
+    if (app.has_vendor_match) {
+      return {
+        label: "Vendor eşleşme",
+        bg: "rgba(168,85,247,0.18)",
+        text: "#e9d5ff",
+        emoji: "🟣",
       };
     }
     return {
@@ -1166,9 +1481,11 @@ export default function Home() {
     const filtered = matchingApps.filter((app) => {
       if (matchingFilter === "exact" && !app.has_exact_match) return false;
       if (matchingFilter === "fuzzy" && !app.has_fuzzy_match) return false;
+      if (matchingFilter === "semantic" && !app.has_semantic_match) return false;
+      if (matchingFilter === "vendor" && !app.has_vendor_match) return false;
       if (
         matchingFilter === "none" &&
-        (app.has_exact_match || app.has_fuzzy_match)
+        (app.has_exact_match || app.has_fuzzy_match || app.has_semantic_match || app.has_vendor_match)
       ) {
         return false;
       }
@@ -1187,8 +1504,14 @@ export default function Home() {
     const fuzzyCount = matchingApps.filter(
       (a) => a.has_fuzzy_match
     ).length;
+    const semanticCount = matchingApps.filter(
+      (a) => a.has_semantic_match
+    ).length;
+    const vendorCount = matchingApps.filter(
+      (a) => a.has_vendor_match
+    ).length;
     const noneCount = matchingApps.filter(
-      (a) => !a.has_exact_match && !a.has_fuzzy_match
+      (a) => !a.has_exact_match && !a.has_fuzzy_match && !a.has_semantic_match && !a.has_vendor_match
     ).length;
 
     return (
@@ -1224,6 +1547,247 @@ export default function Home() {
           <p style={{ fontSize: 12, color: "#fca5a5", marginBottom: 12 }}>
             {matchingError}
           </p>
+        )}
+
+        {/* Yeni Uygulama Ekle Butonu */}
+        <div style={{ marginBottom: 16 }}>
+          <button
+            onClick={() => setShowAddAppForm(!showAddAppForm)}
+            style={{
+              padding: "10px 20px",
+              borderRadius: 8,
+              border: "none",
+              backgroundColor: showAddAppForm ? "#dc2626" : "#10b981",
+              color: "white",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            {showAddAppForm ? "Formu Kapat" : "+ Yeni Uygulama Ekle"}
+          </button>
+        </div>
+
+        {/* Yeni Uygulama Formu */}
+        {showAddAppForm && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: 20,
+              borderRadius: 12,
+              backgroundColor: "#0f172a",
+              border: "1px solid #1e293b",
+            }}
+          >
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: "#e5e7eb" }}>
+              Yeni Uygulama Ekle
+            </h3>
+            <p style={{ fontSize: 12, color: "#9ca3af", marginBottom: 16 }}>
+              Uygulama eklendiğinde otomatik olarak CVE eşleştirmesi yapılacak ve sonuçlar kaydedilecek.
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4, display: "block" }}>
+                  Uygulama Adı *
+                </label>
+                <input
+                  placeholder="Örnek: Apache Tomcat"
+                  value={newAppName}
+                  onChange={(e) => setNewAppName(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #1e293b",
+                    backgroundColor: "#020617",
+                    color: "#e5e7eb",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4, display: "block" }}>
+                  Vendor *
+                </label>
+                <input
+                  placeholder="Örnek: apache"
+                  value={newAppVendor}
+                  onChange={(e) => setNewAppVendor(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #1e293b",
+                    backgroundColor: "#020617",
+                    color: "#e5e7eb",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4, display: "block" }}>
+                  Versiyon
+                </label>
+                <input
+                  placeholder="Örnek: 10.1.17"
+                  value={newAppVersion}
+                  onChange={(e) => setNewAppVersion(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #1e293b",
+                    backgroundColor: "#020617",
+                    color: "#e5e7eb",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4, display: "block" }}>
+                  Kategori
+                </label>
+                <input
+                  placeholder="Örnek: web_server, database"
+                  value={newAppCategory}
+                  onChange={(e) => setNewAppCategory(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #1e293b",
+                    backgroundColor: "#020617",
+                    color: "#e5e7eb",
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <button
+                onClick={() => void handleAddApplication()}
+                disabled={addAppLoading}
+                style={{
+                  padding: "10px 24px",
+                  borderRadius: 8,
+                  border: "none",
+                  backgroundColor: addAppLoading ? "#4b5563" : "#4f46e5",
+                  color: "white",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: addAppLoading ? "default" : "pointer",
+                }}
+              >
+                {addAppLoading ? "Ekleniyor..." : "Ekle ve Eşleştir"}
+              </button>
+              <button
+                onClick={closeAddAppForm}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 8,
+                  border: "1px solid #1e293b",
+                  backgroundColor: "transparent",
+                  color: "#9ca3af",
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                İptal
+              </button>
+            </div>
+
+            {addAppError && (
+              <p style={{ fontSize: 12, color: "#fca5a5", marginTop: 12 }}>{addAppError}</p>
+            )}
+
+            {/* Eşleştirme Sonuçları */}
+            {addAppResult && (
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: 16,
+                  borderRadius: 8,
+                  backgroundColor: "#020617",
+                  border: "1px solid #22c55e",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 20 }}>✅</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#22c55e" }}>
+                    Uygulama Başarıyla Eklendi!
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: "#e5e7eb", marginBottom: 8 }}>
+                  <strong>{addAppResult.application?.app_name}</strong> ({addAppResult.application?.app_id})
+                </div>
+                <div style={{ fontSize: 13, color: "#10b981", marginBottom: 12 }}>
+                  {addAppResult.matching_count} CVE eşleşmesi bulundu ve kaydedildi.
+                </div>
+
+                {addAppResult.matches && addAppResult.matches.length > 0 && (
+                  <div
+                    style={{
+                      maxHeight: 200,
+                      overflowY: "auto",
+                      borderRadius: 8,
+                      border: "1px solid #1e293b",
+                    }}
+                  >
+                    {addAppResult.matches.slice(0, 10).map((m: any, idx: number) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1.5fr 0.7fr 0.6fr 0.8fr",
+                          padding: "8px 12px",
+                          fontSize: 11,
+                          borderBottom: "1px solid #1e293b",
+                          alignItems: "center",
+                        }}
+                      >
+                        <a
+                          href={`https://nvd.nist.gov/vuln/detail/${m.cve_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: "#60a5fa", textDecoration: "none" }}
+                        >
+                          {m.cve_id}
+                        </a>
+                        <span
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            backgroundColor: algorithmStyle(m.algorithm).bg,
+                            color: algorithmStyle(m.algorithm).text,
+                          }}
+                        >
+                          {m.algorithm}
+                        </span>
+                        <span style={{ color: "#9ca3af" }}>{m.score}%</span>
+                        <span
+                          style={{
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            backgroundColor:
+                              m.severity === "CRITICAL" ? "#dc2626" :
+                              m.severity === "HIGH" ? "#ea580c" :
+                              m.severity === "MEDIUM" ? "#ca8a04" : "#4b5563",
+                            color: "white",
+                          }}
+                        >
+                          {m.severity || "N/A"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Özet chip'ler */}
@@ -1270,6 +1834,26 @@ export default function Home() {
             style={{
               padding: "8px 12px",
               borderRadius: 999,
+              border: "1px solid rgba(59,130,246,0.5)",
+              backgroundColor: "rgba(59,130,246,0.12)",
+            }}
+          >
+            Semantic eşleşmesi olan: <strong>{semanticCount}</strong>
+          </div>
+          <div
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
+              border: "1px solid rgba(168,85,247,0.5)",
+              backgroundColor: "rgba(168,85,247,0.12)",
+            }}
+          >
+            Vendor eşleşmesi olan: <strong>{vendorCount}</strong>
+          </div>
+          <div
+            style={{
+              padding: "8px 12px",
+              borderRadius: 999,
               border: "1px solid rgba(148,163,184,0.5)",
               backgroundColor: "rgba(148,163,184,0.12)",
             }}
@@ -1295,6 +1879,8 @@ export default function Home() {
                 ["all", "Tümü"],
                 ["exact", "Sadece Exact"],
                 ["fuzzy", "Sadece Fuzzy"],
+                ["semantic", "Sadece Semantic"],
+                ["vendor", "Sadece Vendor"],
                 ["none", "Sadece Eşleşmeyen"],
               ] as [MatchingFilter, string][]
             ).map(([value, label]) => (
@@ -1353,7 +1939,7 @@ export default function Home() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1.2fr 2.2fr 1fr 1fr 1.2fr",
+              gridTemplateColumns: "1fr 2fr 0.8fr 0.8fr 0.8fr 0.8fr 1.2fr",
               gap: 8,
               padding: "10px 14px",
               fontSize: 12,
@@ -1365,8 +1951,10 @@ export default function Home() {
           >
             <div>APP ID</div>
             <div>Uygulama Adı</div>
-            <div style={{ textAlign: "right" }}>Exact Sayısı</div>
-            <div style={{ textAlign: "right" }}>Fuzzy Sayısı</div>
+            <div style={{ textAlign: "right", color: "#bbf7d0" }}>Exact</div>
+            <div style={{ textAlign: "right", color: "#fed7aa" }}>Fuzzy</div>
+            <div style={{ textAlign: "right", color: "#bfdbfe" }}>Semantic</div>
+            <div style={{ textAlign: "right", color: "#e9d5ff" }}>Vendor</div>
             <div style={{ textAlign: "right" }}>Durum</div>
           </div>
 
@@ -1410,7 +1998,7 @@ export default function Home() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1.2fr 2.2fr 1fr 1fr 1.2fr",
+                    gridTemplateColumns: "1fr 2fr 0.8fr 0.8fr 0.8fr 0.8fr 1.2fr",
                     gap: 8,
                     padding: "10px 14px",
                     fontSize: 13,
@@ -1422,11 +2010,17 @@ export default function Home() {
                     {app.app_id}
                   </div>
                   <div style={{ color: "#e5e7eb" }}>{app.app_name}</div>
-                  <div style={{ textAlign: "right", color: "#e5e7eb" }}>
+                  <div style={{ textAlign: "right", color: app.exact_match_count > 0 ? "#bbf7d0" : "#6b7280" }}>
                     {app.exact_match_count}
                   </div>
-                  <div style={{ textAlign: "right", color: "#e5e7eb" }}>
+                  <div style={{ textAlign: "right", color: app.fuzzy_match_count > 0 ? "#fed7aa" : "#6b7280" }}>
                     {app.fuzzy_match_count}
+                  </div>
+                  <div style={{ textAlign: "right", color: app.semantic_match_count > 0 ? "#bfdbfe" : "#6b7280" }}>
+                    {app.semantic_match_count}
+                  </div>
+                  <div style={{ textAlign: "right", color: app.vendor_match_count > 0 ? "#e9d5ff" : "#6b7280" }}>
+                    {app.vendor_match_count}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <span
@@ -1553,8 +2147,8 @@ export default function Home() {
                           style={{
                             padding: "2px 8px",
                             borderRadius: 999,
-                            backgroundColor: match.algorithm === "exact" ? "rgba(22,163,74,0.18)" : "rgba(245,158,11,0.18)",
-                            color: match.algorithm === "exact" ? "#bbf7d0" : "#fed7aa",
+                            backgroundColor: algorithmStyle(match.algorithm).bg,
+                            color: algorithmStyle(match.algorithm).text,
                             fontSize: 10,
                             textAlign: "center",
                           }}
