@@ -5,12 +5,14 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import MLScanModal from "./components/MLScanModal";
+import MLResultsView from "./components/MLResultsView";
 
 /* ==========================
    Tür tanımları
 ========================== */
 
-type TabId = "dashboard" | "search" | "critical" | "matching";
+type TabId = "dashboard" | "search" | "critical" | "matching" | "ml_results";
 
 type SeverityItem = {
   severity: string;
@@ -59,6 +61,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "search", label: "🔍 CVE Arama" },
   { id: "critical", label: "🚨 Kritik CVE'ler" },
   { id: "matching", label: "🧩 Uygulama Eşleşmeleri" },
+  { id: "ml_results", label: "🤖 ML Sonuçları" },
 ];
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -296,6 +299,7 @@ export default function Home() {
   const [matchingFilter, setMatchingFilter] = useState<MatchingFilter>("all");
   const [matchingSearch, setMatchingSearch] = useState("");
   const [selectedApp, setSelectedApp] = useState<MatchingApp | null>(null);
+  const [scanApp, setScanApp] = useState<{ id: string; name: string } | null>(null);
   const [appDetail, setAppDetail] = useState<any>(null);
   const [appDetailLoading, setAppDetailLoading] = useState(false);
 
@@ -2081,20 +2085,24 @@ export default function Home() {
                 </div>
               </div>
 
-              <button
-                onClick={() => setSelectedApp(null)}
-                style={{
-                  padding: "4px 10px",
-                  borderRadius: 999,
-                  border: "1px solid #1e293b",
-                  backgroundColor: "#020617",
-                  color: "#e5e7eb",
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
-              >
-                Kapat
-              </button>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button
+                  onClick={() => setScanApp({ id: selectedApp.app_id, name: selectedApp.app_name })}
+                  style={{ padding: "6px 14px", borderRadius: 999, border: "none",
+                    backgroundColor: "#6366f1", color: "white", fontSize: 11,
+                    fontWeight: 700, cursor: "pointer" }}
+                >
+                  ML Taramasi Baslat
+                </button>
+                <button
+                  onClick={() => setSelectedApp(null)}
+                  style={{ padding: "4px 10px", borderRadius: 999,
+                    border: "1px solid #1e293b", backgroundColor: "#020617",
+                    color: "#e5e7eb", fontSize: 11, cursor: "pointer" }}
+                >
+                  Kapat
+                </button>
+              </div>
             </div>
 
             {appDetailLoading && (
@@ -2203,6 +2211,19 @@ export default function Home() {
      İÇERİK SEÇİMİ
   ========================== */
 
+  const renderMLResults = () => (
+    <div>
+      <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>
+        ML Model Sonuçları
+      </h2>
+      <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 20 }}>
+        CASCADE hybrid matching (SBERT + TF-IDF) ile bulunan CVE eşleşmeleri.
+        Uygulama Eşleşmeleri sekmesinden ML taraması başlatarak sonuç üretebilirsiniz.
+      </p>
+      <MLResultsView />
+    </div>
+  );
+
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard":
@@ -2213,6 +2234,8 @@ export default function Home() {
         return renderCritical();
       case "matching":
         return renderMatching();
+      case "ml_results":
+        return renderMLResults();
       default:
         return null;
     }
@@ -2290,6 +2313,14 @@ export default function Home() {
       >
         {renderContent()}
       </section>
+      {scanApp && (
+        <MLScanModal
+          appId={scanApp.id}
+          appName={scanApp.name}
+          onClose={() => setScanApp(null)}
+          onDone={() => { setScanApp(null); setActiveTab("ml_results"); }}
+        />
+      )}
     </main>
   );
 }
