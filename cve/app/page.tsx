@@ -5,6 +5,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import Link from "next/link";
 import MLScanModal from "./components/MLScanModal";
 import MLResultsView from "./components/MLResultsView";
 
@@ -2092,7 +2093,7 @@ export default function Home() {
                     backgroundColor: "#6366f1", color: "white", fontSize: 11,
                     fontWeight: 700, cursor: "pointer" }}
                 >
-                  ML Taramasi Baslat
+                  ML Taraması Başlat
                 </button>
                 <button
                   onClick={() => setSelectedApp(null)}
@@ -2300,6 +2301,22 @@ export default function Home() {
               {tab.label}
             </button>
           ))}
+          <Link
+            href="/scanner"
+            style={{
+              borderRadius: 999,
+              border: "1px solid #065f46",
+              padding: "6px 12px",
+              fontSize: 12,
+              backgroundColor: "rgba(16,185,129,0.15)",
+              color: "#6ee7b7",
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            🛡️ Tarayıcı
+          </Link>
         </nav>
       </header>
 
