@@ -3,8 +3,10 @@
 import {
   useEffect,
   useState,
+  useCallback,
   type KeyboardEvent,
 } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import MLScanModal from "./components/MLScanModal";
 import MLResultsView from "./components/MLResultsView";
@@ -285,8 +287,46 @@ function algorithmStyle(algorithm: string) {
    Ana komponent
 ========================== */
 
+const TAB_ROUTES: Record<string, TabId> = {
+  "": "dashboard",
+  "dashboard": "dashboard",
+  "search": "search",
+  "critical": "critical",
+  "matching": "matching",
+  "ml-results": "ml_results",
+};
+
+const ROUTE_FROM_TAB: Record<TabId, string> = {
+  dashboard: "dashboard",
+  search: "search",
+  critical: "critical",
+  matching: "matching",
+  ml_results: "ml-results",
+};
+
+function getTabFromHash(): TabId {
+  if (typeof window === "undefined") return "dashboard";
+  const hash = window.location.hash.replace("#", "");
+  return TAB_ROUTES[hash] || "dashboard";
+}
+
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
+  const [activeTab, setActiveTabState] = useState<TabId>("dashboard");
+
+  // URL hash'inden tab oku
+  useEffect(() => {
+    setActiveTabState(getTabFromHash());
+    const onHashChange = () => setActiveTabState(getTabFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  // Tab değişince URL hash'ini güncelle
+  const setActiveTab = useCallback((tab: TabId) => {
+    setActiveTabState(tab);
+    const route = ROUTE_FROM_TAB[tab];
+    window.history.replaceState(null, "", route ? `#${route}` : "/");
+  }, []);
 
   // DASHBOARD state
   const [stats, setStats] = useState<StatsResponse | null>(null);
