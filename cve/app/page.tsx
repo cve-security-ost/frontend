@@ -248,13 +248,16 @@ function severityColor(sev: string) {
 }
 
 // cvss_score değerini güvenli biçimde yazdırmak için
-function formatCvss(score: number | string | undefined | null) {
-  if (typeof score === "number") return score.toFixed(1);
+function formatCvss(score: number | string | undefined | null, severity?: string) {
+  if (typeof score === "number" && score > 0) return score.toFixed(1);
   if (typeof score === "string") {
     const num = Number(score);
-    return Number.isFinite(num) ? num.toFixed(1) : "N/A";
+    if (Number.isFinite(num) && num > 0) return num.toFixed(1);
   }
-  return "N/A";
+  // CVSS yoksa severity'den tahmini aralık göster
+  const sevMap: Record<string, string> = { CRITICAL: "~9.0+", HIGH: "~7.0-8.9", MEDIUM: "~4.0-6.9", LOW: "~0.1-3.9" };
+  const sev = (severity || "").toUpperCase();
+  return sevMap[sev] || "—";
 }
 
 // score (önem skoru) için
@@ -1115,7 +1118,7 @@ export default function Home() {
                     fontVariantNumeric: "tabular-nums",
                   }}
                 >
-                  {formatCvss(item.cvss_score)}
+                  {formatCvss(item.cvss_score, item.severity)}
                 </div>
 
                 <div style={{ textAlign: "right" }}>
@@ -1445,7 +1448,7 @@ export default function Home() {
                   }}
                 >
                   CVSS skoru:{" "}
-                  <strong>{formatCvss(item.cvss_score)}</strong> • Önem skoru:{" "}
+                  <strong>{formatCvss(item.cvss_score, item.severity)}</strong> • Önem skoru:{" "}
                   <strong>{formatScore(item.score)}</strong>
                 </div>
 

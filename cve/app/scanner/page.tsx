@@ -453,7 +453,16 @@ export default function ScannerPage() {
                               {cve.description ? cve.description.slice(0, 120) + (cve.description.length > 120 ? "..." : "") : "N/A"}
                             </td>
                             <td style={{ padding: "8px", textAlign: "center", fontWeight: 600 }}>
-                              {cve.cvss_score ? cve.cvss_score.toFixed(1) : "N/A"}
+                              {(() => {
+                                if (cve.cvss_score && cve.cvss_score > 0) return cve.cvss_score.toFixed(1);
+                                const sevMap: Record<string, string> = { CRITICAL: "9.0+", HIGH: "7.0-8.9", MEDIUM: "4.0-6.9", LOW: "0.1-3.9" };
+                                const sev = cve.severity?.toUpperCase() || "";
+                                return sevMap[sev] ? (
+                                  <span style={{ color: "#94a3b8", fontSize: 11 }} title="CVSS skoru mevcut değil — severity bazlı aralık gösteriliyor">
+                                    ~{sevMap[sev]}
+                                  </span>
+                                ) : <span style={{ color: "#475569" }}>—</span>;
+                              })()}
                             </td>
                             <td style={{ textAlign: "center", padding: "8px" }}>
                               <span style={{
