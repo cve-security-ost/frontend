@@ -42,7 +42,7 @@ type StageState = {
 const STAGE_CONFIG: { id: StageId; label: string; icon: string; desc: string }[] = [
   { id: "sbert",  label: "SBERT",         icon: "🧠", desc: "Semantik benzerlik — all-MiniLM-L6-v2" },
   { id: "tfidf",  label: "TF-IDF",         icon: "📊", desc: "Leksikal eşleştirme" },
-  { id: "rerank", label: "CASCADE Rerank", icon: "🔗", desc: "1.00×SBERT (tez Tablo 4.2 kazananı, MAP@5=0.705)" },
+  { id: "rerank", label: "CASCADE Rerank", icon: "🔗", desc: "1.00×SBERT (MAP@5=0.705)" },
   { id: "severity", label: "Severity Tahmin", icon: "⚡", desc: "LightGBM ile severity prediction" },
   { id: "save",   label: "DB Kayıt",       icon: "💾", desc: "Sonuçlar veritabanına yazılıyor" },
 ];
