@@ -24,6 +24,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
@@ -162,25 +163,28 @@ export default function MLScanModal({
             const evt = JSON.parse(dataLine.slice(6));
             const { stage, status, count, message } = evt;
 
-            if (stage === "log") {
-              setLogs(prev => [...prev, message]);
-            } else if (stage === "done") {
-              setFinalCount(count);
-              setFinished(true);
-              setScanning(false);
-            } else if (stage === "error") {
-              setErrorMsg(message);
-              setScanning(false);
-              setStages(prev => ({
-                ...prev,
-                error: { status: "error", count: 0, message },
-              }));
-            } else {
-              setStages(prev => ({
-                ...prev,
-                [stage]: { status, count, message },
-              }));
-            }
+            // flushSync — React 18 auto-batching'i devre dışı bırakır, her event hemen render olur
+            flushSync(() => {
+              if (stage === "log") {
+                setLogs(prev => [...prev, message]);
+              } else if (stage === "done") {
+                setFinalCount(count);
+                setFinished(true);
+                setScanning(false);
+              } else if (stage === "error") {
+                setErrorMsg(message);
+                setScanning(false);
+                setStages(prev => ({
+                  ...prev,
+                  error: { status: "error", count: 0, message },
+                }));
+              } else {
+                setStages(prev => ({
+                  ...prev,
+                  [stage]: { status, count, message },
+                }));
+              }
+            });
           } catch {
             // JSON parse hatası — yoksay
           }
