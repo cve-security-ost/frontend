@@ -992,7 +992,7 @@ export default function Home() {
                       key={idx}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1.2fr 0.8fr 0.7fr 0.6fr 0.6fr",
+                        gridTemplateColumns: "1.2fr 0.8fr 1fr 0.6fr",
                         padding: "10px 12px",
                         fontSize: 12,
                         borderBottom: "1px solid #1e293b",
@@ -1025,9 +1025,6 @@ export default function Home() {
                         >
                           {m.severity || "N/A"}
                         </span>
-                      </div>
-                      <div style={{ color: "#9ca3af" }}>
-                        Skor: {m.score}
                       </div>
                     </div>
                   ))}
